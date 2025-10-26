@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "Cour constitutionnelle - Visualiseur amélioré",
+  "version": "1.0.0",
+  "description": "Affiche les arrêts de la Cour constitutionnelle avec PDF.js et extraction automatique des références",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://nl.const-court.be/public/f/*",
+    "https://fr.const-court.be/public/f/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://nl.const-court.be/public/n/*",
+        "https://fr.const-court.be/public/f/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "web/*",
+        "build/*",
+        "viewer-inject.js"
+      ],
+      "matches": [
+        "https://nl.const-court.be/*",
+        "https://fr.const-court.be/*"
+      ]
+    }
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
