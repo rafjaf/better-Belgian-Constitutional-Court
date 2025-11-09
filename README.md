@@ -2,6 +2,8 @@
 
 Chrome extension for optimized consultation of Belgian Constitutional Court judgments.
 
+![[Screenshot.png]]
+
 ## ✨ Features
 
 ### Full PDF.js Viewer
@@ -40,6 +42,9 @@ The extension will automatically activate on:
 2. **View** the PDF with all PDF.js viewer features
 3. **Copy** a passage: the complete reference with B point will be automatically added
 4. **Download**: the file will have a formatted and standardized name
+
+## Treatment of personal data
+No personal data whatsoever is treated by this extension.
 
 ## 📝 Credits
 
