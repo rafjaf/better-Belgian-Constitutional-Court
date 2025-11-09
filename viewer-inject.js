@@ -83,7 +83,7 @@
     // Intercept copy events in the viewer
     document.addEventListener('copy', async function(event) {
         const selection = window.getSelection();
-        const selectedText = selection.toString().trim();
+        let selectedText = selection.toString().trim();
         
         if (!selectedText) return;
         
@@ -103,8 +103,13 @@
             const pdfDocument = window.PDFViewerApplication.pdfDocument;
             currentPageNum = window.PDFViewerApplication.pdfViewer.currentPageNumber;
             
+            // Clean the selected text (remove zero-width spaces, normalize whitespace)
+            selectedText = selectedText.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+            
             // Check if selection starts with "B.X" pattern
-            const normalizedSelection = selectedText.replace(/\s+/g, ' ');
+            const normalizedSelection = selectedText
+                .replace(/\s+/g, ' ')           // Normalize whitespace
+                .replace(/\s*-\s*/g, '-');      // Normalize hyphens (remove spaces around them)
             const selectionBPointMatch = normalizedSelection.match(/^B\.\s*(\d+(?:[\s.]*\d+)*)/);
             
             if (selectionBPointMatch) {
@@ -123,27 +128,35 @@
                     
                     // Only search for selection in current and previous page (for performance)
                     if (selectionStartPos === -1 && pageNum >= currentPageNum - 1) {
-                        const normalizedPageText = pageText.replace(/\s+/g, ' ');
-                        const normalizedFullTextSoFar = fullText.replace(/\s+/g, ' ');
+                        // Clean and normalize both texts the same way
+                        const cleanPageText = pageText
+                            .replace(/[\u200B-\u200D\uFEFF]/g, '')  // Remove zero-width spaces
+                            .replace(/\s+/g, ' ')                    // Normalize whitespace
+                            .replace(/\s*-\s*/g, '-')                // Normalize hyphens
+                            .trim();
+                        const cleanFullTextSoFar = fullText
+                            .replace(/[\u200B-\u200D\uFEFF]/g, '')
+                            .replace(/\s+/g, ' ')
+                            .replace(/\s*-\s*/g, '-');
                         
                         // Try exact match first
-                        let pos = normalizedPageText.indexOf(normalizedSelection);
+                        let pos = cleanPageText.indexOf(normalizedSelection);
                         if (pos !== -1) {
-                            selectionStartPos = normalizedFullTextSoFar.length + pos;
+                            selectionStartPos = cleanFullTextSoFar.length + pos;
                             console.log('Found selection (exact) in page', pageNum);
                         } else {
                             // Try with first 30 words
                             const words30 = normalizedSelection.split(' ').slice(0, 30).join(' ');
-                            pos = normalizedPageText.indexOf(words30);
+                            pos = cleanPageText.indexOf(words30);
                             if (pos !== -1) {
-                                selectionStartPos = normalizedFullTextSoFar.length + pos;
+                                selectionStartPos = cleanFullTextSoFar.length + pos;
                                 console.log('Found selection (30 words) in page', pageNum);
                             } else {
                                 // Try with first 10 words as last resort
                                 const words10 = normalizedSelection.split(' ').slice(0, 10).join(' ');
-                                pos = normalizedPageText.indexOf(words10);
+                                pos = cleanPageText.indexOf(words10);
                                 if (pos !== -1) {
-                                    selectionStartPos = normalizedFullTextSoFar.length + pos;
+                                    selectionStartPos = cleanFullTextSoFar.length + pos;
                                     console.log('Found selection (10 words) in page', pageNum);
                                 }
                             }
