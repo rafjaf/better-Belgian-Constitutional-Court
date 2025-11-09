@@ -1,13 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "Cour constitutionnelle - Visualiseur amélioré",
+  "name": "Better Belgian Constitutional Court",
   "version": "1.0.0",
-  "description": "Affiche les arrêts de la Cour constitutionnelle avec PDF.js et extraction automatique des références",
-  "permissions": [
-    "storage"
-  ],
+  "description": "Display judgments of the Belgian Constitutional Court with PDF.js and add automatic reference extraction when copying text.",
   "host_permissions": [
-    "https://nl.const-court.be/public/f/*",
+    "https://nl.const-court.be/public/n/*",
     "https://fr.const-court.be/public/f/*"
   ],
   "content_scripts": [
@@ -37,5 +34,14 @@
     "16": "icon16.png",
     "48": "icon48.png",
     "128": "icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    },
+    "default_title": "Better Belgian Constitutional Court"
   }
 }

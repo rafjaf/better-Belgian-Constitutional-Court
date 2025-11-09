@@ -4,9 +4,50 @@
 
     console.log('Copy hijack script loaded');
     
+    // Listen for save requests from parent window
+    window.addEventListener('message', async function(event) {
+        if (event.data.type === 'SAVE_PDF') {
+            console.log('Save PDF request received');
+            
+            // Trigger PDF.js save function
+            if (window.PDFViewerApplication && window.PDFViewerApplication.pdfDocument) {
+                try {
+                    // Use the reference short as filename (e.g., "GwH, nr. 123/2024.pdf")
+                    const filename = `${event.data.filename}.pdf`;
+                    
+                    console.log('Saving PDF as:', filename);
+                    
+                    // Get the PDF data with annotations
+                    const data = await window.PDFViewerApplication.pdfDocument.saveDocument();
+                    
+                    // Create a blob and download it with the custom filename
+                    const blob = new Blob([data], { type: 'application/pdf' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                    console.log('PDF saved successfully with annotations as:', filename);
+                } catch (error) {
+                    console.error('Error saving PDF:', error);
+                    // Fallback to regular download if save fails
+                    try {
+                        await window.PDFViewerApplication.download();
+                    } catch (fallbackError) {
+                        console.error('Fallback download also failed:', fallbackError);
+                    }
+                }
+            }
+        }
+    });
+    
     // Function to extract and send PDF text for date extraction
-    async function extractAndSendText() {
-        console.log('Attempting to extract PDF text...');
+    async function extractAndSendText(attempt = 1) {
+        console.log(`Attempting to extract PDF text (attempt ${attempt}/10)...`);
         try {
             if (window.PDFViewerApplication && window.PDFViewerApplication.pdfDocument) {
                 console.log('PDFViewerApplication found, getting first page...');
@@ -24,31 +65,20 @@
                 }, '*');
                 console.log('Sent PDF_TEXT message to parent');
             } else {
-                console.log('PDFViewerApplication not ready yet');
+                throw new Error('PDFViewerApplication not ready yet');
             }
         } catch (e) {
-            console.error('Error extracting PDF text:', e);
+            console.log('PDF not ready:', e.message);
+            if (attempt < 10) {
+                setTimeout(() => extractAndSendText(attempt + 1), 100);
+            } else {
+                console.error('Failed to extract PDF text after 10 attempts');
+            }
         }
     }
     
-    // Try multiple events to catch when PDF is loaded
-    document.addEventListener('pagesinit', function() {
-        console.log('pagesinit event fired');
-        extractAndSendText();
-    });
-    
-    document.addEventListener('pagesloaded', function() {
-        console.log('pagesloaded event fired');
-        extractAndSendText();
-    });
-    
-    // Also try after a delay as fallback
-    setTimeout(function() {
-        console.log('Timeout fallback - checking if PDF is loaded');
-        if (window.PDFViewerApplication && window.PDFViewerApplication.pdfDocument) {
-            extractAndSendText();
-        }
-    }, 2000);
+    // Start extraction immediately
+    extractAndSendText();
     
     // Intercept copy events in the viewer
     document.addEventListener('copy', async function(event) {

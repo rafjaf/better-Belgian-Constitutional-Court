@@ -109,6 +109,12 @@
         const numInt = parseInt(num);
         const isOldCourt = yearInt < 2007 || (yearInt === 2007 && numInt <= 72);
 
+        // Set court name (won't change)
+        const courtName = isDutch
+            ? (isOldCourt ? 'Arbitragehof' : 'GwH')
+            : (isOldCourt ? 'C.A.' : 'C.C.');
+        window.ccReferenceShort = `${courtName} ${year}-${parseInt(num)}`;
+
         // Create header div
         const header = document.createElement("div");
         header.id = "cc-ref-header";
@@ -127,17 +133,11 @@
             // Set default reference (will be updated when we get PDF text)
             let reference;
             if (isDutch) {
-                const courtName = isOldCourt ? 'Arbitragehof' : 'GwH';
                 reference = `${courtName} ${year}, nr. <a href='${loc}'>${parseInt(num)}/${year}</a>`;
             } else {
-                const courtName = isOldCourt ? 'C.A.' : 'C.C.';
                 reference = `${courtName}, ${year}, n° <a href='${loc}'>${parseInt(num)}/${year}</a>`;
             }
             document.getElementById('refText').innerHTML = reference;
-            window.ccReference = reference;
-            window.ccReferenceShort = isDutch 
-                ? `${isOldCourt ? 'Arbitragehof' : 'GwH'}, nr. ${parseInt(num)}/${year}` 
-                : `${isOldCourt ? 'C.A.' : 'C.C.'}, n° ${parseInt(num)}/${year}`;
 
         } catch (error) {
             document.getElementById('refText').innerHTML = isDutch ? `Fout: ${error.message}` : `Erreur: ${error.message}`;
@@ -159,14 +159,14 @@
         }, false);
         
         document.getElementById('btnFilename').addEventListener('click', function(e) {
-            const a = document.createElement("a");
-            a.href = loc;
-            const courtAbbrev = isDutch 
-                ? (isOldCourt ? 'Arbitragehof' : 'GwH')
-                : (isOldCourt ? 'C.A.' : 'C.C.');
-            const prefix = `${courtAbbrev} ${year}-${num}.pdf`;
-            a.download = prefix;
-            a.click();
+            // Trigger PDF.js save function to save with annotations
+            const iframe = document.getElementById('cc-pdf-viewer');
+            if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({
+                    type: 'SAVE_PDF',
+                    filename: window.ccReferenceShort
+                }, '*');
+            }
             e.preventDefault();
         }, false);
 
@@ -187,12 +187,6 @@
                 
                 // Update reference with extracted date
                 let reference;
-                const courtName = isDutch 
-                    ? (isOldCourt ? 'Arbitragehof' : 'GwH')
-                    : (isOldCourt ? 'C.A.' : 'C.C.');
-                const courtShort = isDutch
-                    ? (isOldCourt ? 'Arbitragehof' : 'GwH')
-                    : (isOldCourt ? 'C.A.' : 'C.C.');
                     
                 if (isDutch) {
                     if (dateInfo && dateInfo.day && dateInfo.month) {
@@ -204,7 +198,6 @@
                     }
                     document.getElementById('refText').innerHTML = reference;
                     window.ccReference = reference;
-                    window.ccReferenceShort = `${courtShort}, nr. ${parseInt(num)}/${dateInfo ? dateInfo.year : year}`;
                 } else {
                     if (dateInfo && dateInfo.day && dateInfo.month) {
                         reference = `${courtName}, ${parseInt(dateInfo.day)}${dateInfo.day == "01" ? "er" : ""} ${dateInfo.month} ${dateInfo.year}, n° <a href='${loc}'>${parseInt(num)}/${dateInfo.year}</a>`;
@@ -215,7 +208,6 @@
                     }
                     document.getElementById('refText').innerHTML = reference;
                     window.ccReference = reference;
-                    window.ccReferenceShort = `${courtShort}, n° ${parseInt(num)}/${dateInfo ? dateInfo.year : year}`;
                 }
             }
             else if (event.data.type === 'COPY_TEXT') {
