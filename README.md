@@ -2,7 +2,7 @@
 
 Chrome extension for optimized consultation of Belgian Constitutional Court judgments.
 
-![[Screenshot.png]]
+![Screenshot](Screenshot.png)
 
 ## ✨ Features
 
