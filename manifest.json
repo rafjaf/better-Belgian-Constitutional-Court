@@ -43,5 +43,13 @@
       "128": "icon128.png"
     },
     "default_title": "Better Belgian Constitutional Court"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "{d0c96cdb-7d2c-4e6c-9e6f-1a9f6f1d4a5a}",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
   }
 }
