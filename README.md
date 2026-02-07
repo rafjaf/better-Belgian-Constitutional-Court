@@ -1,6 +1,10 @@
 # Constitutional Court - Enhanced Viewer
 
-Chrome extension for optimized consultation of Belgian Constitutional Court judgments.
+Browser extension for optimized consultation of Belgian Constitutional Court judgments. 
+
+Install :
+- on Chrome : https://chromewebstore.google.com/detail/better-belgian-constituti/jnmabkmfhbfdbpfbljcnooecglmfoagl
+- on Firefox : https://addons.mozilla.org/en-US/firefox/addon/better-constitutional-court/
 
 ![Screenshot](Screenshot.png)
 
