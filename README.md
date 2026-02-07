@@ -51,3 +51,8 @@ No personal data whatsoever is treated by this extension.
 - **Author**: Rafaël Jafferali
 - **PDF.js**: Mozilla Foundation (Apache License 2.0)
 - **Vibe-coded** with the help of Claude Sonnet 4.5 (Anthropic)
+
+## Release history
+
+- **1.0.0** : first version
+- **1.0.1** : fixed detection of the date of the judgement

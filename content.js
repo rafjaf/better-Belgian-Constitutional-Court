@@ -74,14 +74,15 @@
             
             // Use translated date regex
             const datePattern = isDutch
-                ? /van\s+(\d{1,2})\s+(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)\s+((?:\d\s*){4,5})/i
-                : /du\s+(\d{1,2})\s+(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+((?:\d\s*){4,5})/i;
+                ? /van\s+(\d(?:\s*\d)?)\s+(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)\s+((?:\d\s*){4,5})/i
+                : /du\s+(\d(?:\s*\d)?)(?:er)?\s+(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+((?:\d\s*){4,5})/i;
             const match = relevantText.match(datePattern);
             
             if (match) {
+                const dayStr = match[1].replace(/\s+/g, '');
                 const yearStr = match[3].replace(/\s+/g, '');
                 return {
-                    day: match[1],
+                    day: dayStr,
                     month: match[2].toLowerCase(),
                     year: yearStr
                 };
