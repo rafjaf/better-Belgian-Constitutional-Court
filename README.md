@@ -58,5 +58,6 @@ No personal data whatsoever is treated by this extension.
 
 ## Release history
 
-- **1.0.0** : first version
-- **1.0.1** : fixed detection of the date of the judgement
+- 1.0.0 : first version
+- 1.0.1 : fixed detection of the date of the judgement
+- 1.0.2 : improved detection of location of copied text to build correct reference

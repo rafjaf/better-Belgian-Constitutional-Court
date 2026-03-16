@@ -97,7 +97,7 @@
     async function init() {
         // Get info from URL
         const loc = window.location.href;
-        const isDutch = loc.includes('nl.const-court.be/public/n/');
+        const isDutch = loc.includes('/public/n/');
         const year = loc.split("/")[5];
         // Dutch: /public/n/YYYY/YYYY-NNNn.pdf, French: /public/f/YYYY/YYYY-NNNf.pdf
         let numMatch = loc.split("/")[6].match(/(\d+-)(\d+)/);

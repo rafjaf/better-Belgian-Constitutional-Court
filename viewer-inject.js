@@ -119,58 +119,46 @@
             } else {
                 // Extract text from all pages up to current page
                 let fullText = '';
-                let selectionStartPos = -1;
                 
                 for (let pageNum = 1; pageNum <= currentPageNum; pageNum++) {
                     const page = await pdfDocument.getPage(pageNum);
                     const textContent = await page.getTextContent();
                     const pageText = textContent.items.map(item => item.str).join(' ');
-                    
-                    // Only search for selection in current and previous page (for performance)
-                    if (selectionStartPos === -1 && pageNum >= currentPageNum - 1) {
-                        // Clean and normalize both texts the same way
-                        const cleanPageText = pageText
-                            .replace(/[\u200B-\u200D\uFEFF]/g, '')  // Remove zero-width spaces
-                            .replace(/\s+/g, ' ')                    // Normalize whitespace
-                            .replace(/\s*-\s*/g, '-')                // Normalize hyphens
-                            .trim();
-                        const cleanFullTextSoFar = fullText
-                            .replace(/[\u200B-\u200D\uFEFF]/g, '')
-                            .replace(/\s+/g, ' ')
-                            .replace(/\s*-\s*/g, '-');
-                        
-                        // Try exact match first
-                        let pos = cleanPageText.indexOf(normalizedSelection);
-                        if (pos !== -1) {
-                            selectionStartPos = cleanFullTextSoFar.length + pos;
-                            console.log('Found selection (exact) in page', pageNum);
-                        } else {
-                            // Try with first 30 words
-                            const words30 = normalizedSelection.split(' ').slice(0, 30).join(' ');
-                            pos = cleanPageText.indexOf(words30);
-                            if (pos !== -1) {
-                                selectionStartPos = cleanFullTextSoFar.length + pos;
-                                console.log('Found selection (30 words) in page', pageNum);
-                            } else {
-                                // Try with first 10 words as last resort
-                                const words10 = normalizedSelection.split(' ').slice(0, 10).join(' ');
-                                pos = cleanPageText.indexOf(words10);
-                                if (pos !== -1) {
-                                    selectionStartPos = cleanFullTextSoFar.length + pos;
-                                    console.log('Found selection (10 words) in page', pageNum);
-                                }
-                            }
-                        }
-                    }
-                    
                     fullText += pageText + ' ';
                 }
                 
-                console.log('Full text length:', fullText.length, 'Selection found at:', selectionStartPos);
+                // Normalize full text consistently (same normalization as normalizedSelection)
+                const normalizedFullText = fullText
+                    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+                    .replace(/\s+/g, ' ')
+                    .replace(/\s*-\s*/g, '-')
+                    .trim();
+                
+                // Find the selection in the normalized text (use lastIndexOf to get 
+                // the occurrence closest to the current page)
+                let selectionStartPos = normalizedFullText.lastIndexOf(normalizedSelection);
+                if (selectionStartPos === -1) {
+                    // Try with first 30 words
+                    const words30 = normalizedSelection.split(' ').slice(0, 30).join(' ');
+                    selectionStartPos = normalizedFullText.lastIndexOf(words30);
+                    if (selectionStartPos !== -1) {
+                        console.log('Found selection (30 words) at position', selectionStartPos);
+                    }
+                } else {
+                    console.log('Found selection (exact) at position', selectionStartPos);
+                }
+                if (selectionStartPos === -1) {
+                    // Try with first 10 words as last resort
+                    const words10 = normalizedSelection.split(' ').slice(0, 10).join(' ');
+                    selectionStartPos = normalizedFullText.lastIndexOf(words10);
+                    if (selectionStartPos !== -1) {
+                        console.log('Found selection (10 words) at position', selectionStartPos);
+                    }
+                }
+                
+                console.log('Full text length:', normalizedFullText.length, 'Selection found at:', selectionStartPos);
                 
                 if (selectionStartPos !== -1) {
-                    // Normalize and search for B. points
-                    const normalizedFullText = fullText.replace(/\s+/g, ' ');
                     const textBeforeSelection = normalizedFullText.substring(0, selectionStartPos);
                     
                     console.log('Text before selection (last 200 chars):', textBeforeSelection.substring(Math.max(0, textBeforeSelection.length - 200)));
