@@ -1,4 +1,4 @@
-# Constitutional Court - Enhanced Viewer
+# Better Belgian Constitutional Court
 
 Browser extension for optimized consultation of Belgian Constitutional Court judgments. 
 
