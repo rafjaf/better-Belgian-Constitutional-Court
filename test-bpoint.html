@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>B-Point Detection Tests — Constitutional Court Extension</title>
+  <style>
+    body { font-family: monospace; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.2rem; }
+    p.note { color: #555; font-size: 0.85rem; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
+    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #f0f0f0; }
+    td.pass { background: #d4edda; color: #155724; font-weight: bold; }
+    td.fail { background: #f8d7da; color: #721c24; font-weight: bold; }
+    td.running { background: #fff3cd; color: #856404; }
+    td.error { background: #e2e3e5; color: #383d41; }
+    .passage { max-width: 380px; white-space: pre-wrap; word-break: break-word; }
+    button { margin: 1rem 0; padding: 0.4rem 1rem; font-size: 0.9rem; cursor: pointer; }
+    #log { background: #f8f8f8; border: 1px solid #ddd; padding: 0.5rem; font-size: 0.75rem;
+           max-height: 300px; overflow-y: auto; white-space: pre-wrap; margin-top: 1rem; }
+    .summary { font-size: 1rem; font-weight: bold; margin: 0.5rem 0; }
+  </style>
+</head>
+<body>
+<h1>B-Point Detection — Regression Tests</h1>
+<p class="note">
+  This page tests the B-point detection logic used by the extension.<br>
+  Open it via <code>chrome-extension://[extension-id]/test-bpoint.html</code>.<br>
+  The extension must have host_permissions for fr.const-court.be / nl.const-court.be.
+</p>
+<button id="runBtn">▶ Run all tests</button>
+<div class="summary" id="summary"></div>
+<table id="resultsTable">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>PDF</th>
+      <th>Page</th>
+      <th>Passage (search text)</th>
+      <th>Expected</th>
+      <th>Got</th>
+      <th>Result</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+<div id="log"></div>
+
+<script type="module">
+// ---------------------------------------------------------------------------
+// Re-implementation of the fixed B-point detection logic from viewer-inject.js
+// Keep this in sync with that file when modifying.
+// ---------------------------------------------------------------------------
+
+// Inline-import pdf.mjs from the extension's build directory
+import * as pdfjsLib from './build/pdf.mjs';
+
+// Point the worker at the extension's worker file
+pdfjsLib.GlobalWorkerOptions.workerSrc = './build/pdf.worker.mjs';
+
+// Cross-reference filter: matches the tail of the 80-char window before "B."
+// when it is an inline reference (e.g. "comme il est dit en B.1.2") rather than
+// a section heading. Only full legal connector phrases are matched — bare
+// articles (le, de, en) are NOT matched on their own to avoid false positives.
+const XREF_PRECURSOR = /(?:(?:comme|ainsi qu['\u2019]?)?\s*il est (?:dit|expos\u00e9|mentionn\u00e9|indiqu\u00e9|constat\u00e9|pr\u00e9cis\u00e9|rappel\u00e9|relev\u00e9|\u00e9nonc\u00e9|soulign\u00e9|observ\u00e9|expliqu\u00e9)\s+(?:au point|en)\s*$|(?:mentionn\u00e9e?s?|vis\u00e9e?s?|cit\u00e9e?s?|\u00e9nonc\u00e9e?s?|indiqu\u00e9e?s?|expos\u00e9e?s?|constat\u00e9e?s?|d\u00e9crite?s?|pr\u00e9vue?s?|d\u00e9finie?s?|pr\u00e9cis\u00e9e?s?|rappel\u00e9e?s?|relev\u00e9e?s?|soulign\u00e9e?s?|trait\u00e9e?s?|examin\u00e9e?s?|analys\u00e9e?s?)\s+(?:au point|aux points|en|au|sous)\s*$|(?:au(?:x)?\s+points?|les?\s+points?|du\s+point|des?\s+points?|voir\s+(?:le\s+point|les\s+points)?|voy\.\s+(?:le\s+point|les\s+points|\u00e9galement)?|cf\.\s*|aux?\s+points?)\s*$|(?:punt(?:en)?|zie\s+(?:punt|de\s+punt(?:en)?)?|het\s+punt|van\s+punt)\s*$|(?:dit en|est dit en|cit\u00e9 en|vis\u00e9 en|d\u00e9crit en|pr\u00e9vu en|d\u00e9fini en|mentionn\u00e9 en|indiqu\u00e9 en|expos\u00e9 en|constat\u00e9 en|pr\u00e9cis\u00e9 en|rappel\u00e9 en|relev\u00e9 en|soulign\u00e9 en|\u00e9nonc\u00e9 en|observ\u00e9 en|expliqu\u00e9 en|examin\u00e9 en)\s*$|(?:dit (?:au point|aux points|sous|au))\s*$|(?:et (?:en|au point|aux points))\s*$)/i;
+
+function normalize(text) {
+    return text
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .replace(/\s+/g, ' ')
+        .replace(/\s*-\s*/g, '-')
+        .trim();
+}
+
+function normalizeForMatch(text) {
+    return text
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .replace(/\s+/g, ' ')
+        .replace(/\s*-\s*/g, '-')
+        .replace(/\s*[\u2018\u2019\u0027]\s*/g, "'")
+        .replace(/\s*[\u201C\u201D\u0022]\s*/g, '"')
+        .trim();
+}
+
+/**
+ * Detect the B-point section for `selectedText` in the PDF at `pdfUrl`.
+ * `upToPage` is the 1-based page number currently viewed (we load up to +1).
+ *
+ * Returns a string like "9" or "1.2" (no "B." prefix), or "" if not found.
+ */
+async function detectBPoint(pdfUrl, upToPage, selectedText) {
+    const log = (msg) => appendLog('[detect] ' + msg);
+
+    const loadingTask = pdfjsLib.getDocument(pdfUrl);
+    const pdf = await loadingTask.promise;
+    const numPages = pdf.numPages;
+
+    // Clean and normalize the selection (mirror of viewer-inject.js)
+    const cleanSelected = selectedText.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+    const normalizedSelection = cleanSelected
+        .replace(/\s+/g, ' ')
+        .replace(/\s*-\s*/g, '-');
+
+    // Fast path: selection starts with "B.X"
+    const fastMatch = normalizedSelection.match(/^B\.\s*(\d+(?:[\s.]*\d+)*)/);
+    if (fastMatch) {
+        return fastMatch[1].replace(/\s+/g, '').replace(/\.+/g, '.').replace(/\.$/, '');
+    }
+
+    // Extract text from pages 1 to upToPage+1
+    const pagesToExtract = Math.min(numPages, upToPage + 1);
+    let fullText = '';
+    for (let p = 1; p <= pagesToExtract; p++) {
+        const page = await pdf.getPage(p);
+        const tc = await page.getTextContent();
+        fullText += tc.items.map(i => i.str).join(' ') + ' ';
+    }
+
+    const normalizedFullText = normalize(fullText);
+    const quoteNormFullText = normalizeForMatch(fullText);
+    const quoteNormSelection = normalizeForMatch(normalizedSelection);
+
+    // Locate the selection (try plain, then quote-normalized, then word-truncated)
+    let pos = normalizedFullText.lastIndexOf(normalizedSelection);
+    let textForSearch = normalizedFullText;
+
+    if (pos === -1) {
+        pos = quoteNormFullText.lastIndexOf(quoteNormSelection);
+        textForSearch = quoteNormFullText;
+    }
+    if (pos === -1) {
+        const w30 = quoteNormSelection.split(' ').slice(0, 30).join(' ');
+        pos = quoteNormFullText.lastIndexOf(w30);
+        textForSearch = quoteNormFullText;
+    }
+    if (pos === -1) {
+        const w10 = quoteNormSelection.split(' ').slice(0, 10).join(' ');
+        pos = quoteNormFullText.lastIndexOf(w10);
+        textForSearch = quoteNormFullText;
+    }
+    if (pos === -1) {
+        log('Selection not found in extracted text');
+        return '';
+    }
+
+    const before = textForSearch.substring(0, pos);
+
+    const pointPattern = /\bB\.\s*(\d+(?:[\s.]*\d+)*)/g;
+    const matches = [];
+    let m;
+    while ((m = pointPattern.exec(before)) !== null) {
+        const clean = m[1].replace(/\s+/g, '').replace(/\.+/g, '.').replace(/\.$/, '');
+        const preceding = before.substring(Math.max(0, m.index - 80), m.index);
+        if (XREF_PRECURSOR.test(preceding)) {
+            log('Skip xref B.' + clean);
+            continue;
+        }
+        matches.push({ number: clean, position: m.index });
+    }
+
+    log('Section headings before selection: ' + matches.map(x => 'B.' + x.number).join(', '));
+
+    if (matches.length > 0) return matches[matches.length - 1].number;
+    return '';
+}
+
+// ---------------------------------------------------------------------------
+// Test case definitions
+// Each case: { pdf, page, passage, expected }
+//   pdf      — relative URL of the PDF (will be fetched by the extension)
+//   page     — 1-based page number where the passage appears (approximate is fine;
+//              we load up to page+1 anyway)
+//   passage  — first ~30 words of the copied text (must appear verbatim in the PDF)
+//   expected — expected B-point number string (e.g. "9" or "1.2")
+// ---------------------------------------------------------------------------
+const BASE_FR = 'https://fr.const-court.be/public/f/2026/';
+
+const TESTS = [
+    // 032 — the original bug report PDF
+    {
+        id: 1,
+        pdf: BASE_FR + '2026-032f.pdf',
+        page: 6,
+        passage: "Il ressort de la jurisprudence du Conseil d\u2019\u00C9tat qu\u2019un contrat de gestion peut contenir des clauses de nature r\u00E9glementaire",
+        expected: '6',
+        label: '32/2026 \u2013 B.6 (original bug report)'
+    },
+    {
+        id: 2,
+        pdf: BASE_FR + '2026-032f.pdf',
+        page: 7,
+        passage: "Pour le reste, contrairement \u00E0 ce que soutient le Conseil des ministres, une proc\u00E9dure de droit commun",
+        expected: '9',
+        label: '32/2026 \u2013 B.9 (xref to B.1.2 inside B.9)'
+    },
+    {
+        id: 3,
+        pdf: BASE_FR + '2026-032f.pdf',
+        page: 5,
+        passage: "La Cour est interrog\u00E9e sur la compatibilit\u00E9",
+        expected: '3',
+        label: '32/2026 \u2013 B.3 (preceded by "pr\u00E9judicielle")'
+    },
+    {
+        id: 4,
+        pdf: BASE_FR + '2026-032f.pdf',
+        page: 8,
+        passage: "Il s\u2019ensuit que la disposition en cause",
+        expected: '10',
+        label: '32/2026 \u2013 B.10'
+    },
+    {
+        id: 5,
+        pdf: BASE_FR + '2026-032f.pdf',
+        page: 5,
+        passage: "Il appartient en r\u00E8gle \u00E0 la juridiction",
+        expected: '4.1',
+        label: '32/2026 \u2013 B.4.1'
+    },
+    {
+        id: 6,
+        pdf: BASE_FR + '2026-032f.pdf',
+        page: 7,
+        passage: "Un contrat de gestion, conclu entre l",
+        expected: '8',
+        label: '32/2026 \u2013 B.8'
+    },
+    // 025
+    {
+        id: 7,
+        pdf: BASE_FR + '2026-025f.pdf',
+        page: 14,
+        passage: "L\u2019examen de la compatibilit\u00E9 d\u2019une disposition l\u00E9gislative avec le principe",
+        expected: '23.1',
+        label: '25/2026 \u2013 B.23.1'
+    },
+    {
+        id: 8,
+        pdf: BASE_FR + '2026-025f.pdf',
+        page: 14,
+        passage: "Les articles 1399 \u00E0 1401, 1404 et 1405 de l\u2019ancien Code civil sont compatibles",
+        expected: '21',
+        label: '25/2026 \u2013 B.21'
+    },
+    // 030 (very large document)
+    {
+        id: 9,
+        pdf: BASE_FR + '2026-030f.pdf',
+        page: 58,
+        passage: "En l\u2019esp\u00E8ce, le choix de principe de l\u2019\u00E2ge de douze ans comme l\u2019\u00E2ge",
+        expected: '154',
+        label: '30/2026 \u2013 B.154 (high number)'
+    },
+    {
+        id: 10,
+        pdf: BASE_FR + '2026-030f.pdf',
+        page: 26,
+        passage: "Le grief est irrecevable",
+        expected: '33',
+        label: '30/2026 \u2013 B.33'
+    },
+    // 031
+    {
+        id: 11,
+        pdf: BASE_FR + '2026-031f.pdf',
+        page: 29,
+        passage: "Le Conseil des ministres soutient que le quatri\u00E8me moyen des parties requ\u00E9rantes est irrecevable",
+        expected: '30.1',
+        label: '31/2026 \u2013 B.30.1'
+    },
+    {
+        id: 12,
+        pdf: BASE_FR + '2026-031f.pdf',
+        page: 18,
+        passage: "Ainsi que l\u2019indique le l\u00E9gislateur dans les travaux pr\u00E9paratoires",
+        expected: '13.4',
+        label: '31/2026 \u2013 B.13.4 (contains xref to B.3.1)'
+    },
+    // 033
+    {
+        id: 13,
+        pdf: BASE_FR + '2026-033f.pdf',
+        page: 7,
+        passage: "Il ressort des travaux pr\u00E9paratoires de l\u2019amendement \u00E0 l\u2019origine des articles 150",
+        expected: '4',
+        label: '33/2026 \u2013 B.4'
+    },
+    {
+        id: 14,
+        pdf: BASE_FR + '2026-033f.pdf',
+        page: 6,
+        passage: "Afin de garantir le paiement du droit de condamnation",
+        expected: '3',
+        label: '33/2026 \u2013 B.3'
+    },
+    // 035
+    {
+        id: 15,
+        pdf: BASE_FR + '2026-035f.pdf',
+        page: 5,
+        passage: "La Cour doit n\u00E9anmoins veiller \u00E0 ce que la mesure en cause ne porte pas",
+        expected: '7.1',
+        label: '35/2026 \u2013 B.7.1'
+    },
+    {
+        id: 16,
+        pdf: BASE_FR + '2026-035f.pdf',
+        page: 5,
+        passage: "C\u2019est ainsi qu\u2019il convient de constater que le d\u00E9biteur qui ne dispose pas",
+        expected: '6',
+        label: '35/2026 \u2013 B.6'
+    },
+    {
+        id: 17,
+        pdf: BASE_FR + '2026-035f.pdf',
+        page: 4,
+        passage: "Il r\u00E9sulte de ce qui pr\u00E9c\u00E8de que le l\u00E9gislateur a estim\u00E9 que le d\u00E9biteur",
+        expected: '5',
+        label: '35/2026 \u2013 B.5'
+    },
+];
+
+// ---------------------------------------------------------------------------
+// UI helpers
+// ---------------------------------------------------------------------------
+const logEl = document.getElementById('log');
+function appendLog(msg) {
+    logEl.textContent += msg + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+}
+
+function renderRows() {
+    const tbody = document.getElementById('tbody');
+    tbody.innerHTML = '';
+    TESTS.forEach(tc => {
+        const tr = document.createElement('tr');
+        tr.id = 'row-' + tc.id;
+        tr.innerHTML = `
+            <td>${tc.id}</td>
+            <td>${tc.label}</td>
+            <td>${tc.page}</td>
+            <td class="passage">${tc.passage.substring(0, 120)}${tc.passage.length > 120 ? '…' : ''}</td>
+            <td>${tc.expected !== '' ? 'B.' + tc.expected : '(TBD — skipped)'}</td>
+            <td class="result-got">—</td>
+            <td class="running result-status">waiting</td>`;
+        tbody.appendChild(tr);
+    });
+}
+
+function setRowResult(id, got, status) {
+    const row = document.getElementById('row-' + id);
+    if (!row) return;
+    row.querySelector('.result-got').textContent = got ? 'B.' + got : '(none)';
+    const cell = row.querySelector('.result-status');
+    cell.textContent = status;
+    cell.className = 'result-status ' + status;
+}
+
+// ---------------------------------------------------------------------------
+// Test runner
+// ---------------------------------------------------------------------------
+async function runAll() {
+    logEl.textContent = '';
+    document.getElementById('summary').textContent = 'Running…';
+    document.getElementById('runBtn').disabled = true;
+
+    let passed = 0, failed = 0, skipped = 0;
+
+    for (const tc of TESTS) {
+        if (tc.expected === '') {
+            setRowResult(tc.id, '', 'error');
+            document.querySelector('#row-' + tc.id + ' .result-status').textContent = 'skipped (TBD)';
+            skipped++;
+            continue;
+        }
+        setRowResult(tc.id, '', 'running');
+        document.querySelector('#row-' + tc.id + ' .result-status').textContent = 'running…';
+        appendLog(`\n=== Test ${tc.id}: ${tc.label} ===`);
+        try {
+            const got = await detectBPoint(tc.pdf, tc.page, tc.passage);
+            appendLog(`Result: B.${got || '(none)'}, expected: B.${tc.expected}`);
+            if (got === tc.expected) {
+                setRowResult(tc.id, got, 'pass');
+                passed++;
+            } else {
+                setRowResult(tc.id, got, 'fail');
+                failed++;
+            }
+        } catch (e) {
+            appendLog('Error: ' + e.message);
+            setRowResult(tc.id, '', 'error');
+            document.querySelector('#row-' + tc.id + ' .result-status').textContent = 'error: ' + e.message.substring(0, 60);
+            failed++;
+        }
+    }
+
+    const total = TESTS.length - skipped;
+    document.getElementById('summary').textContent =
+        `${passed}/${total} passed, ${failed} failed, ${skipped} skipped (TBD)`;
+    document.getElementById('runBtn').disabled = false;
+}
+
+renderRows();
+document.getElementById('runBtn').addEventListener('click', runAll);
+</script>
+</body>
+</html>

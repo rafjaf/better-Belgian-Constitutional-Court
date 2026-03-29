@@ -117,10 +117,13 @@
                 pointNumber = selectionBPointMatch[1].replace(/\s+/g, '').replace(/\.+/g, '.').replace(/\.$/, '');
                 console.log('Selection starts with B. point:', pointNumber);
             } else {
-                // Extract text from all pages up to current page
+                // Extract text from pages 1 up to currentPageNum + 1 (extra page as buffer
+                // in case the viewer's reported page number is off by one when copying near
+                // the top of a page).
+                const pagesToExtract = Math.min(pdfDocument.numPages, currentPageNum + 1);
                 let fullText = '';
                 
-                for (let pageNum = 1; pageNum <= currentPageNum; pageNum++) {
+                for (let pageNum = 1; pageNum <= pagesToExtract; pageNum++) {
                     const page = await pdfDocument.getPage(pageNum);
                     const textContent = await page.getTextContent();
                     const pageText = textContent.items.map(item => item.str).join(' ');
@@ -134,32 +137,56 @@
                     .replace(/\s*-\s*/g, '-')
                     .trim();
                 
+                // Additional normalization that collapses curly/smart quotes with their
+                // surrounding spaces into a plain ASCII apostrophe. PDF.js often renders
+                // « d'État » as « d ' État » (U+2019 with spaces), while the browser's
+                // selection.toString() may return « d'État » (plain apostrophe, no spaces).
+                const quoteNormFullText = normalizedFullText
+                    .replace(/\s*[\u2018\u2019\u0027]\s*/g, "'")
+                    .replace(/\s*[\u201C\u201D\u0022]\s*/g, '"');
+                const quoteNormSelection = normalizedSelection
+                    .replace(/\s*[\u2018\u2019\u0027]\s*/g, "'")
+                    .replace(/\s*[\u201C\u201D\u0022]\s*/g, '"');
+                
                 // Find the selection in the normalized text (use lastIndexOf to get 
-                // the occurrence closest to the current page)
+                // the occurrence closest to the current page).
+                // Try plain normalized first, then quote-normalized, then word-truncated.
                 let selectionStartPos = normalizedFullText.lastIndexOf(normalizedSelection);
-                if (selectionStartPos === -1) {
-                    // Try with first 30 words
-                    const words30 = normalizedSelection.split(' ').slice(0, 30).join(' ');
-                    selectionStartPos = normalizedFullText.lastIndexOf(words30);
-                    if (selectionStartPos !== -1) {
-                        console.log('Found selection (30 words) at position', selectionStartPos);
-                    }
-                } else {
+                let textForSearch = normalizedFullText;
+                
+                if (selectionStartPos !== -1) {
                     console.log('Found selection (exact) at position', selectionStartPos);
+                } else {
+                    // Try with quote-normalized text
+                    selectionStartPos = quoteNormFullText.lastIndexOf(quoteNormSelection);
+                    textForSearch = quoteNormFullText;
+                    if (selectionStartPos !== -1) {
+                        console.log('Found selection (quote-normalized) at position', selectionStartPos);
+                    }
+                }
+                if (selectionStartPos === -1) {
+                    // Try with first 30 words (quote-normalized)
+                    const words30 = quoteNormSelection.split(' ').slice(0, 30).join(' ');
+                    selectionStartPos = quoteNormFullText.lastIndexOf(words30);
+                    textForSearch = quoteNormFullText;
+                    if (selectionStartPos !== -1) {
+                        console.log('Found selection (30 words, quote-norm) at position', selectionStartPos);
+                    }
                 }
                 if (selectionStartPos === -1) {
                     // Try with first 10 words as last resort
-                    const words10 = normalizedSelection.split(' ').slice(0, 10).join(' ');
-                    selectionStartPos = normalizedFullText.lastIndexOf(words10);
+                    const words10 = quoteNormSelection.split(' ').slice(0, 10).join(' ');
+                    selectionStartPos = quoteNormFullText.lastIndexOf(words10);
+                    textForSearch = quoteNormFullText;
                     if (selectionStartPos !== -1) {
-                        console.log('Found selection (10 words) at position', selectionStartPos);
+                        console.log('Found selection (10 words, quote-norm) at position', selectionStartPos);
                     }
                 }
                 
-                console.log('Full text length:', normalizedFullText.length, 'Selection found at:', selectionStartPos);
+                console.log('Full text length:', textForSearch.length, 'Selection found at:', selectionStartPos);
                 
                 if (selectionStartPos !== -1) {
-                    const textBeforeSelection = normalizedFullText.substring(0, selectionStartPos);
+                    const textBeforeSelection = textForSearch.substring(0, selectionStartPos);
                     
                     console.log('Text before selection (last 200 chars):', textBeforeSelection.substring(Math.max(0, textBeforeSelection.length - 200)));
                     
@@ -169,37 +196,32 @@
                     let matches = [];
                     let match;
                     
+                    // Cross-reference filter: when "B.X" appears mid-sentence as a
+                    // reference to another section (e.g. "comme il est dit en B.1.2"),
+                    // it is preceded by characteristic legal connector phrases. We check
+                    // the 80 characters before each "B." match against this pattern.
+                    // Only full phrases are matched — bare articles like "le", "de", "en"
+                    // are NOT matched on their own to avoid false positives on words
+                    // ending in those letters (e.g. "préjudicielle ").
+                    const XREF_PRECURSOR = /(?:(?:comme|ainsi qu['\u2019]?)?\s*il est (?:dit|expos\u00e9|mentionn\u00e9|indiqu\u00e9|constat\u00e9|pr\u00e9cis\u00e9|rappel\u00e9|relev\u00e9|\u00e9nonc\u00e9|soulign\u00e9|observ\u00e9|expliqu\u00e9)\s+(?:au point|en)\s*$|(?:mentionn\u00e9e?s?|vis\u00e9e?s?|cit\u00e9e?s?|\u00e9nonc\u00e9e?s?|indiqu\u00e9e?s?|expos\u00e9e?s?|constat\u00e9e?s?|d\u00e9crite?s?|pr\u00e9vue?s?|d\u00e9finie?s?|pr\u00e9cis\u00e9e?s?|rappel\u00e9e?s?|relev\u00e9e?s?|soulign\u00e9e?s?|trait\u00e9e?s?|examin\u00e9e?s?|analys\u00e9e?s?)\s+(?:au point|aux points|en|au|sous)\s*$|(?:au(?:x)?\s+points?|les?\s+points?|du\s+point|des?\s+points?|voir\s+(?:le\s+point|les\s+points)?|voy\.\s+(?:le\s+point|les\s+points|\u00e9galement)?|cf\.\s*|aux?\s+points?)\s*$|(?:punt(?:en)?|zie\s+(?:punt|de\s+punt(?:en)?)?|het\s+punt|van\s+punt)\s*$|(?:dit en|est dit en|cit\u00e9 en|vis\u00e9 en|d\u00e9crit en|pr\u00e9vu en|d\u00e9fini en|mentionn\u00e9 en|indiqu\u00e9 en|expos\u00e9 en|constat\u00e9 en|pr\u00e9cis\u00e9 en|rappel\u00e9 en|relev\u00e9 en|soulign\u00e9 en|\u00e9nonc\u00e9 en|observ\u00e9 en|expliqu\u00e9 en|examin\u00e9 en)\s*$|(?:dit (?:au point|aux points|sous|au))\s*$|(?:et (?:en|au point|aux points))\s*$)/i;
+                    
                     while ((match = pointPattern.exec(textBeforeSelection)) !== null) {
                         const cleanNumber = match[1].replace(/\s+/g, '').replace(/\.+/g, '.').replace(/\.$/, '');
+                        
+                        // Guard: skip matches that are cross-references, not section headings
+                        const preceding = textBeforeSelection.substring(Math.max(0, match.index - 80), match.index);
+                        if (XREF_PRECURSOR.test(preceding)) {
+                            console.log('Skipping cross-reference B.' + cleanNumber + ' at position', match.index);
+                            continue;
+                        }
+                        
                         matches.push({
                             number: cleanNumber,
                             position: match.index
                         });
                     }
                     
-                    // If we only found B.1.x, also look for standalone numbers
-                    if (matches.length > 0 && !matches.some(m => parseInt(m.number) > 1)) {
-                        console.log('Only found B.1.x, searching for standalone section numbers');
-                        const recentText = textBeforeSelection.substring(Math.max(0, textBeforeSelection.length - 2000));
-                        const offset = Math.max(0, textBeforeSelection.length - 2000);
-                        const standalonePattern = /\b(\d+)\.\s/g;
-                        let standaloneMatch;
-                        
-                        while ((standaloneMatch = standalonePattern.exec(recentText)) !== null) {
-                            const num = parseInt(standaloneMatch[1]);
-                            if (num >= 2 && num <= 20) {
-                                matches.push({
-                                    number: standaloneMatch[1],
-                                    position: offset + standaloneMatch.index
-                                });
-                            }
-                        }
-                        
-                        // Sort by position
-                        matches.sort((a, b) => a.position - b.position);
-                    }
-                    
-                    console.log('All B. points found:', matches.map(m => 'B.' + m.number).join(', '));
+                    console.log('All B. section headings found:', matches.map(m => 'B.' + m.number).join(', '));
                     
                     if (matches.length > 0) {
                         pointNumber = matches[matches.length - 1].number;

@@ -61,3 +61,4 @@ No personal data whatsoever is treated by this extension.
 - 1.0.0 : first version
 - 1.0.1 : fixed detection of the date of the judgement
 - 1.0.2 : improved detection of location of copied text to build correct reference
+- 1.0.3 : fixed B-point detection when copied passage contains cross-references to other B-points

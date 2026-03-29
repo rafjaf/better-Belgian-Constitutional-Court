@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Better Belgian Constitutional Court",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Display judgments of the Belgian Constitutional Court with PDF.js and add automatic reference extraction when copying text.",
   "host_permissions": [
     "https://nl.const-court.be/public/n/*",
@@ -26,11 +26,13 @@
       "resources": [
         "web/*",
         "build/*",
-        "viewer-inject.js"
+        "viewer-inject.js",
+        "test-bpoint.html"
       ],
       "matches": [
         "https://nl.const-court.be/*",
-        "https://fr.const-court.be/*"
+        "https://fr.const-court.be/*",
+        "<all_urls>"
       ]
     }
   ],

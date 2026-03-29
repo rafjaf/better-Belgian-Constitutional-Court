@@ -1,0 +1,8 @@
+.playwright-mpc/
+test-pdfs/
+.gitignore
+.packageignore
+LICENSE
+README.md
+Screenshot.png
+test-bpoint.html
