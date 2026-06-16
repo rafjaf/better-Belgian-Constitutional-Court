@@ -41,6 +41,8 @@ Install :
 The extension will automatically activate on:
 - `https://fr.const-court.be/public/f/*`
 - `https://nl.const-court.be/public/n/*`
+- `https://fr.const-court.be/{number}/{year}.pdf`
+- `https://nl.const-court.be/{number}/{year}.pdf`
 
 1. **Open a judgment** on the Constitutional Court website
 2. **View** the PDF with all PDF.js viewer features
@@ -62,3 +64,4 @@ No personal data whatsoever is treated by this extension.
 - 1.0.1 : fixed detection of the date of the judgement
 - 1.0.2 : improved detection of location of copied text to build correct reference
 - 1.0.3 : fixed B-point detection when copied passage contains cross-references to other B-points
+- 1.0.4 : added support for PDF URLs such as https://fr.const-court.be/69/2026.pdf

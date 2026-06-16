@@ -94,27 +94,59 @@
         }
     }
 
+    function getJudgmentInfo(loc) {
+        const url = new URL(loc);
+        const segments = url.pathname.split('/').filter(Boolean);
+        const hostLanguage = url.hostname.startsWith('nl.') ? 'n' : (url.hostname.startsWith('fr.') ? 'f' : '');
+        let language = '';
+        let year = '';
+        let num = '';
+
+        // Dutch: /public/n/YYYY/YYYY-NNNn.pdf, French: /public/f/YYYY/YYYY-NNNf.pdf
+        if (segments.length >= 4 && segments[0] === 'public' && /^[fn]$/i.test(segments[1])) {
+            language = segments[1].toLowerCase();
+            year = segments[2];
+            const numMatch = segments[3].match(/(?:^|-)0*(\d+)[fn]?\.pdf$/i);
+            num = numMatch ? numMatch[1] : '';
+        // Short format: /NNN/YYYY.pdf, with language determined by fr./nl. subdomain
+        } else if (segments.length === 2 && /^\d+$/.test(segments[0]) && /^\d{4}\.pdf$/i.test(segments[1]) && hostLanguage) {
+            language = hostLanguage;
+            num = segments[0].replace(/^0+/, '') || '0';
+            year = segments[1].match(/^(\d{4})\.pdf$/i)[1];
+        }
+
+        if (!language || !year || !num) {
+            return null;
+        }
+
+        return {
+            isDutch: language === 'n',
+            year,
+            num
+        };
+    }
+
     async function init() {
         // Get info from URL
         const loc = window.location.href;
-        const isDutch = loc.includes('/public/n/');
-        const year = loc.split("/")[5];
-        // Dutch: /public/n/YYYY/YYYY-NNNn.pdf, French: /public/f/YYYY/YYYY-NNNf.pdf
-        let numMatch = loc.split("/")[6].match(/(\d+-)(\d+)/);
-        const num = numMatch ? numMatch[2] : '';
+        const judgmentInfo = getJudgmentInfo(loc);
+        if (!judgmentInfo) {
+            return;
+        }
+        const { isDutch, year, num } = judgmentInfo;
         
         // Determine if this is an old judgment (before the court was renamed)
         // Court was "Cour d'Arbitrage" / "Arbitragehof" until 2007-05-07
         // Last C.A. judgment was n° 72/2007
-        const yearInt = parseInt(year);
-        const numInt = parseInt(num);
+        const yearInt = parseInt(year, 10);
+        const numInt = parseInt(num, 10);
         const isOldCourt = yearInt < 2007 || (yearInt === 2007 && numInt <= 72);
 
         // Set court name (won't change)
         const courtName = isDutch
             ? (isOldCourt ? 'Arbitragehof' : 'GwH')
             : (isOldCourt ? 'C.A.' : 'C.C.');
-        window.ccReferenceShort = `${courtName} ${year}-${parseInt(num)}`;
+        window.ccReferenceShort = `${courtName} ${year}-${parseInt(num, 10)}`;
 
         // Create header div
         const header = document.createElement("div");
@@ -134,9 +166,9 @@
             // Set default reference (will be updated when we get PDF text)
             let reference;
             if (isDutch) {
-                reference = `${courtName} ${year}, nr. <a href='${loc}'>${parseInt(num)}/${year}</a>`;
+                reference = `${courtName} ${year}, nr. <a href='${loc}'>${parseInt(num, 10)}/${year}</a>`;
             } else {
-                reference = `${courtName}, ${year}, n° <a href='${loc}'>${parseInt(num)}/${year}</a>`;
+                reference = `${courtName}, ${year}, n° <a href='${loc}'>${parseInt(num, 10)}/${year}</a>`;
             }
             document.getElementById('refText').innerHTML = reference;
 
@@ -191,20 +223,20 @@
                     
                 if (isDutch) {
                     if (dateInfo && dateInfo.day && dateInfo.month) {
-                        reference = `${courtName} ${parseInt(dateInfo.day)} ${dateInfo.month} ${dateInfo.year}, nr. <a href='${loc}'>${parseInt(num)}/${dateInfo.year}</a>`;
+                        reference = `${courtName} ${parseInt(dateInfo.day, 10)} ${dateInfo.month} ${dateInfo.year}, nr. <a href='${loc}'>${parseInt(num, 10)}/${dateInfo.year}</a>`;
                         console.log('Dutch date extracted:', dateInfo);
                     } else {
-                        reference = `${courtName} ${year}, nr. <a href='${loc}'>${parseInt(num)}/${year}</a>`;
+                        reference = `${courtName} ${year}, nr. <a href='${loc}'>${parseInt(num, 10)}/${year}</a>`;
                         console.log('Dutch date extraction failed, using fallback');
                     }
                     document.getElementById('refText').innerHTML = reference;
                     window.ccReference = reference;
                 } else {
                     if (dateInfo && dateInfo.day && dateInfo.month) {
-                        reference = `${courtName}, ${parseInt(dateInfo.day)}${dateInfo.day == "01" ? "er" : ""} ${dateInfo.month} ${dateInfo.year}, n° <a href='${loc}'>${parseInt(num)}/${dateInfo.year}</a>`;
+                        reference = `${courtName}, ${parseInt(dateInfo.day, 10)}${dateInfo.day == "01" ? "er" : ""} ${dateInfo.month} ${dateInfo.year}, n° <a href='${loc}'>${parseInt(num, 10)}/${dateInfo.year}</a>`;
                         console.log('Date extracted successfully:', dateInfo);
                     } else {
-                        reference = `${courtName}, ${year}, n° <a href='${loc}'>${parseInt(num)}/${year}</a>`;
+                        reference = `${courtName}, ${year}, n° <a href='${loc}'>${parseInt(num, 10)}/${year}</a>`;
                         console.log('Date extraction failed, using fallback');
                     }
                     document.getElementById('refText').innerHTML = reference;
