@@ -44,6 +44,9 @@ The extension will automatically activate on:
 - `https://fr.const-court.be/{number}/{year}.pdf`
 - `https://nl.const-court.be/{number}/{year}.pdf`
 
+Short PDF URLs support both four-digit years and two-digit years, such as
+`https://fr.const-court.be/21/97.pdf` for judgment 21/1997.
+
 1. **Open a judgment** on the Constitutional Court website
 2. **View** the PDF with all PDF.js viewer features
 3. **Copy** a passage: the complete reference with B point will be automatically added
@@ -65,3 +68,4 @@ No personal data whatsoever is treated by this extension.
 - 1.0.2 : improved detection of location of copied text to build correct reference
 - 1.0.3 : fixed B-point detection when copied passage contains cross-references to other B-points
 - 1.0.4 : added support for PDF URLs such as https://fr.const-court.be/69/2026.pdf
+- 1.0.5 : added support for two-digit years in PDF URLs such as https://fr.const-court.be/21/97.pdf

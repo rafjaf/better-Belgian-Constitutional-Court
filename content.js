@@ -108,11 +108,15 @@
             year = segments[2];
             const numMatch = segments[3].match(/(?:^|-)0*(\d+)[fn]?\.pdf$/i);
             num = numMatch ? numMatch[1] : '';
-        // Short format: /NNN/YYYY.pdf, with language determined by fr./nl. subdomain
-        } else if (segments.length === 2 && /^\d+$/.test(segments[0]) && /^\d{4}\.pdf$/i.test(segments[1]) && hostLanguage) {
+        // Short formats: /NNN/YYYY.pdf or /NNN/YY.pdf, with language determined by fr./nl.
+        } else if (segments.length === 2 && /^\d+$/.test(segments[0]) && /^(?:\d{2}|\d{4})\.pdf$/i.test(segments[1]) && hostLanguage) {
             language = hostLanguage;
             num = segments[0].replace(/^0+/, '') || '0';
-            year = segments[1].match(/^(\d{4})\.pdf$/i)[1];
+            year = segments[1].replace(/\.pdf$/i, '');
+            // Expand two-digit years: 50–99 refer to the 1900s, 00–49 to the 2000s.
+            if (year.length === 2) {
+                year = `${Number(year) >= 50 ? '19' : '20'}${year}`;
+            }
         }
 
         if (!language || !year || !num) {
